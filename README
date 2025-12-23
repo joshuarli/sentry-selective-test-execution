@@ -8,4 +8,6 @@ pytest-data/
 couldn't find where we upload these (it's secrets.COLLECT_TEST_DATA_GCS_BUCKET which i can't read)
 so had to write reports for each shard then merge them
 https://github.com/getsentry/sentry/actions/runs/20451603315/usage
-- pytest.json: combined pytest report
+- pytest-data/pytest.json: combined pytest report
+- python3 pytest-durations.py pytest-data/pytest.json 'tests/sentry/monitors'
+    view test file durations for a directory
