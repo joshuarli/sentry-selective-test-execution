@@ -68,12 +68,14 @@ if __name__ == "__main__":
     reporoot = "/Users/josh/dev/sentry"
 
     for root, dirs, files in os.walk(f"{reporoot}/src/sentry"):
-        for file in files:
-            if not file.endswith(".py"):
+        for filename in files:
+            if not filename.endswith(".py"):
                 continue
+
+            abs_path = os.path.abspath(os.path.join(root, filename))
             # TODO: file paths in coverage are absolute so we'll have to
             #       change to relative to sentry reporoot when we get there
-            source_files.append(os.path.join("/home/runner/work/sentry/sentry/src/sentry", file))
+            source_files.append("/home/runner/work/sentry/sentry" + abs_path[len(reporoot):])
 
     numbers_of_affected_tests = []
 
@@ -86,7 +88,6 @@ if __name__ == "__main__":
 
             print(f"{file_path}: {len(affected_tests)}")
             numbers_of_affected_tests.append(len(affected_tests))
-
 
 
     import matplotlib.pyplot as plt
