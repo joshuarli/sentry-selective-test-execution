@@ -4,6 +4,7 @@
 # ]
 # ///
 
+import json
 import os
 import sqlite3
 from typing import List, Set, Dict
@@ -64,6 +65,13 @@ if __name__ == "__main__":
     #with sqlite3.connect("coverage.sqlite3") as conn:
     #    affected_tests = affected_tests_for_files(conn, [f"{reporoot}/src/sentry/preprod/size_analysis/compare.py", "{reporoot}/src/sentry/preprod/size_analysis/download.py"])
 
+    with open("pytest-data/pytest.json", encoding="utf-8") as f:
+        data = json.load(f)
+
+    test_durations = {}
+    for test in data["tests"]:
+        test_durations[test["nodeid"]] = test["total_duration"]
+
     source_files = []
     reporoot = "/Users/josh/dev/sentry"
 
@@ -77,28 +85,35 @@ if __name__ == "__main__":
             #       change to relative to sentry reporoot when we get there
             source_files.append("/home/runner/work/sentry/sentry" + abs_path[len(reporoot):])
 
-    numbers_of_affected_tests = []
+    #numbers_of_affected_tests = []
+    durations_of_affected_tests = []
 
     with sqlite3.connect("coverage.sqlite3") as conn:
         for file_path in source_files:
             affected_tests = affected_tests_for_files(conn, (file_path,))
 
-            #for test_id in affected_tests.keys():
-                # TODO determine total duration of affected tests
+            total_duration = 0.0
+            for test_id in affected_tests.keys():
+                # TODO: handle things like
+                # 'tests/sentry/templatetags/test_sentry_assets.py::test_script_context[{% script src=url_path'
+                test_duration = test_durations.get(test_id, 0.0)
+                total_duration += test_duration
 
-            print(f"{file_path}: {len(affected_tests)}")
-            numbers_of_affected_tests.append(len(affected_tests))
+            # print(f"{file_path}: {len(affected_tests)} affected tests, total duration {total_duration}")
+            durations_of_affected_tests.append(total_duration)
+            #numbers_of_affected_tests.append(len(affected_tests))
 
 
     import matplotlib.pyplot as plt
-    from collections import Counter
 
-    counts = Counter(numbers_of_affected_tests)
-    x = list(counts.keys())
-    y = list(counts.values())
+    # from collections import Counter
+    #counts = Counter(numbers_of_affected_tests)
+    #x = list(counts.keys())
+    #y = list(counts.values())
+    #plt.bar(x, y)
 
-    plt.bar(x, y)
-    plt.xlabel("# selected tests")
+    plt.hist(durations_of_affected_tests, bins=200)
+    plt.xlabel("selected test duration")
     plt.ylabel("frequency")
-    plt.title("distribution of single source file -> # selected tests")
+    plt.title("distribution of single source file -> selected tests total duration")
     plt.show()
