@@ -8,9 +8,6 @@ import os
 import sqlite3
 from typing import List, Set, Dict
 
-import matplotlib.pyplot as plt
-from collections import Counter
-
 
 def executed_lines(bitblob: bytes) -> Set[int]:
     """
@@ -41,10 +38,14 @@ def affected_tests_for_file(conn: sqlite3.Connection, file_path: str) -> Dict[st
     """, (f"%/{file_path}",))
 
     results = {}
-    for context, bitblob in cur.fetchall():
+    for test_context, bitblob in cur.fetchall():
         lines = executed_lines(bitblob)
         if lines:
-            results[context] = lines
+            if test_context[-4:] != "|run":
+                # for now we're ignoring |setup and |teardown
+                continue
+            test_id = test_context.partition('|')[0]
+            results[test_id] = lines
     return results
 
 
@@ -68,37 +69,34 @@ if __name__ == "__main__":
                 continue
             source_files.append(os.path.join(root, file)[len(reporoot)+1:])
 
-    numbers_of_affected_test_files = []
+    # numbers_of_affected_test_files = []
+    numbers_of_affected_tests = []
 
     with sqlite3.connect("coverage.sqlite3") as conn:
         for file_path in source_files:
-            test_lines = affected_tests_for_file(conn, file_path)
-            test_files = {test_context.split("::")[0] for test_context in test_lines.keys()}
-            print(f"{file_path}: {len(test_files)}")
+            affected_tests = affected_tests_for_file(conn, file_path)
 
-            numbers_of_affected_test_files.append(len(test_files))
+            #for test_id in affected_tests.keys():
+                # TODO determine total duration of affected tests
 
-            # for test, lines in sorted(test_lines.items()):
-            #    print(f"  {test}: {sorted(lines)}")
+            print(f"{file_path}: {len(affected_tests)}")
+            numbers_of_affected_tests.append(len(affected_tests))
 
-    counts = Counter(numbers_of_affected_test_files)
+
+            # test_files = {test_context.split("::")[0] for test_id in affected_tests.keys()}
+            # print(f"{file_path}: {len(test_files)}")
+            # numbers_of_affected_test_files.append(len(test_files))
+
+
+    import matplotlib.pyplot as plt
+    from collections import Counter
+
+    counts = Counter(numbers_of_affected_tests)
     x = list(counts.keys())
     y = list(counts.values())
 
     plt.bar(x, y)
-    plt.xlabel("# selected test files")
+    plt.xlabel("# selected tests")
     plt.ylabel("frequency")
-    plt.title("distribution of single source file -> # selected test files")
+    plt.title("distribution of single source file -> # selected tests")
     plt.show()
-
-
-    # with sqlite3.connect("coverage.sqlite3") as conn:
-    #     for file_path in source_files:
-    #         test_lines = affected_tests_for_file(conn, file_path)
-    #         print(f"\nSource file: {file_path}")
-    #         if test_lines:
-    #             print("Affected tests and executed lines:")
-    #             for test, lines in sorted(test_lines.items()):
-    #                 print(f"  {test}: {sorted(lines)}")
-    #         else:
-    #             print("  (No affected tests found)")
