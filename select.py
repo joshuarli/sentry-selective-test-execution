@@ -22,43 +22,47 @@ def executed_lines(bitblob: bytes) -> Set[int]:
     return lines
 
 
-def affected_tests_for_file(conn: sqlite3.Connection, file_path: str) -> Dict[str, Set[int]]:
-    """
-    Returns a dictionary:
-      test context -> set of executed line numbers in the given file.
-    """
+def affected_tests_for_files(conn: sqlite3.Connection, file_paths: list[str]) -> dict[str, set[int]]:
+    placeholders = ",".join("?" for _ in file_paths)
+
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        f"""
         SELECT c.context, lb.numbits
         FROM line_bits lb
         JOIN file f    ON lb.file_id = f.id
         JOIN context c ON lb.context_id = c.id
-        WHERE f.path LIKE ?
+        WHERE f.path IN ({placeholders})
           AND c.context != ''
-    """, (f"%/{file_path}",))
+        """,
+        file_paths,
+    )
 
-    results = {}
+    results: dict[str, Set[int]] = {}
+
     for test_context, bitblob in cur.fetchall():
+        if not test_context.endswith("|run"):
+            # for now we're ignoring |setup and |teardown
+            continue
+
         lines = executed_lines(bitblob)
-        if lines:
-            if test_context[-4:] != "|run":
-                # for now we're ignoring |setup and |teardown
-                continue
-            test_id = test_context.partition('|')[0]
-            results[test_id] = lines
+        if not lines:
+            continue
+
+        test_id = test_context.partition("|")[0]
+
+        if test_id in results:
+            results[test_id].update(lines)
+        else:
+            results[test_id] = set(lines)
+
     return results
 
 
 if __name__ == "__main__":
-    # source_files = [
-    #     "src/sentry/preprod/size_analysis/compare.py",
-    #     "src/sentry/preprod/size_analysis/download.py",
-    #     "src/sentry/preprod/size_analysis/issues.py",
-    #     "src/sentry/preprod/size_analysis/insight_models.py",
-    #     "src/sentry/preprod/size_analysis/models.py",
-    #     "src/sentry/preprod/size_analysis/tasks.py",
-    #     "src/sentry/preprod/size_analysis/utils.py",
-    # ]
+    # we'll need this for backend PR simulations as they touch multiple files
+    #with sqlite3.connect("coverage.sqlite3") as conn:
+    #    affected_tests = affected_tests_for_files(conn, [f"{reporoot}/src/sentry/preprod/size_analysis/compare.py", "{reporoot}/src/sentry/preprod/size_analysis/download.py"])
 
     source_files = []
     reporoot = "/Users/josh/dev/sentry"
@@ -67,14 +71,15 @@ if __name__ == "__main__":
         for file in files:
             if not file.endswith(".py"):
                 continue
-            source_files.append(os.path.join(root, file)[len(reporoot)+1:])
+            # TODO: file paths in coverage are absolute so we'll have to
+            #       change to relative to sentry reporoot when we get there
+            source_files.append(os.path.join("/home/runner/work/sentry/sentry/src/sentry", file))
 
-    # numbers_of_affected_test_files = []
     numbers_of_affected_tests = []
 
     with sqlite3.connect("coverage.sqlite3") as conn:
         for file_path in source_files:
-            affected_tests = affected_tests_for_file(conn, file_path)
+            affected_tests = affected_tests_for_files(conn, (file_path,))
 
             #for test_id in affected_tests.keys():
                 # TODO determine total duration of affected tests
@@ -82,10 +87,6 @@ if __name__ == "__main__":
             print(f"{file_path}: {len(affected_tests)}")
             numbers_of_affected_tests.append(len(affected_tests))
 
-
-            # test_files = {test_context.split("::")[0] for test_id in affected_tests.keys()}
-            # print(f"{file_path}: {len(test_files)}")
-            # numbers_of_affected_test_files.append(len(test_files))
 
 
     import matplotlib.pyplot as plt
